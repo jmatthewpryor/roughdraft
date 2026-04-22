@@ -8,7 +8,7 @@
     "roughdraft": "./packages/server/bin/roughdraft.mjs"
   },
   "scripts": {
-    "dev": "pnpm --filter @roughdraft/app dev",
+    "dev": "node scripts/dev.mjs",
     "build": "pnpm --filter @roughdraft/app build && pnpm --filter @roughdraft/server build",
     "preview": "node packages/server/bin/roughdraft.mjs"
   },
@@ -21,9 +21,12 @@
     "express": "^5.1.0"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "typescript": "^5.8.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
