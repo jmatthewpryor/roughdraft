@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { criticMarkdownToEditorState } from "./critic-markup";
 import {
   mermaidBlockAttribute,
   rawMarkdownBlockAttribute,
@@ -208,5 +209,39 @@ describe("mermaid blocks", () => {
     expect(html).toContain("<pre><code");
     expect(html).not.toContain(mermaidBlockAttribute);
     expect(toMarkdown(html)).toBe(code);
+  });
+});
+
+describe("criticMarkdownToEditorState mermaid", () => {
+  const diagram = "graph TD\n  A[Start] --> B[End]";
+  const fence = "```mermaid\n" + diagram + "\n```\n";
+
+  type DocNode = {
+    type?: string;
+    attrs?: Record<string, unknown>;
+    content?: DocNode[];
+  };
+
+  function findNodeByType(node: DocNode, type: string): DocNode | null {
+    if (node.type === type) return node;
+    for (const child of node.content ?? []) {
+      const found = findNodeByType(child, type);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  it("parses a mermaid fence into a mermaidBlock node carrying the source", () => {
+    const { doc } = criticMarkdownToEditorState(fence);
+    const node = findNodeByType(doc as DocNode, "mermaidBlock");
+
+    expect(node).not.toBeNull();
+    expect(node?.attrs?.source).toBe(diagram);
+  });
+
+  it("does not turn a non-mermaid fence into a mermaidBlock node", () => {
+    const { doc } = criticMarkdownToEditorState("```ts\nconst x = 1;\n```\n");
+
+    expect(findNodeByType(doc as DocNode, "mermaidBlock")).toBeNull();
   });
 });

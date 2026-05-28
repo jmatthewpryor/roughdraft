@@ -68,7 +68,7 @@ function decodeMermaidSource(encoded: string): string {
   }
 }
 
-function createMermaidBlock(source: string): string {
+export function createMermaidBlock(source: string): string {
   return `<div ${mermaidBlockAttribute}="${escapeHtml(
     encodeMermaidSource(source),
   )}"></div>\n`;
