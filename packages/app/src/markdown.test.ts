@@ -2,10 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  mermaidBlockAttribute,
+  rawMarkdownBlockAttribute,
   splitYamlFrontmatter,
   toHtml,
   toMarkdown,
-  rawMarkdownBlockAttribute,
 } from "./markdown";
 
 function readMarkdownFixture(name: string): string {
@@ -173,5 +174,39 @@ describe("toMarkdown", () => {
     expect(
       toMarkdown(`<div ${rawMarkdownBlockAttribute}="${encoded}"></div>`),
     ).toBe(protectedMarkdown);
+  });
+});
+
+describe("mermaid blocks", () => {
+  const diagram = "graph TD\n  A[Start] --> B[End]";
+  const fence = "```mermaid\n" + diagram + "\n```\n";
+
+  it("renders a mermaid fence as a source-carrying block, not a code block", () => {
+    const html = toHtml(fence);
+
+    expect(html).toContain(mermaidBlockAttribute);
+    expect(html).toContain(encodeURIComponent(diagram));
+    expect(html).not.toContain("<pre><code");
+  });
+
+  it("round-trips a mermaid fence through HTML back to markdown", () => {
+    expect(toMarkdown(toHtml(fence))).toBe(fence);
+  });
+
+  it("converts a mermaid block element back to a fence", () => {
+    const encoded = encodeURIComponent(diagram);
+
+    expect(
+      toMarkdown(`<div ${mermaidBlockAttribute}="${encoded}"></div>`),
+    ).toBe(fence);
+  });
+
+  it("leaves non-mermaid fenced code as a code block", () => {
+    const code = "```ts\nconst x = 1;\n```\n";
+    const html = toHtml(code);
+
+    expect(html).toContain("<pre><code");
+    expect(html).not.toContain(mermaidBlockAttribute);
+    expect(toMarkdown(html)).toBe(code);
   });
 });
