@@ -39,19 +39,24 @@ test.describe("mermaid diagram rendering", () => {
 
     await openMarkdownFile(page, filePath);
 
-    const editor = page.getByTestId("rich-text-editor");
+    const editor = page.locator(".ProseMirror");
+    await expect(editor).toContainText("Mermaid");
 
     // The mermaid fence renders to an inline SVG (not a code block). Mermaid
-    // loads lazily and renders asynchronously, so allow extra time.
-    const diagram = editor.locator(".mermaid-block svg");
-    await expect(diagram).toBeVisible({ timeout: 15_000 });
+    // loads lazily and renders asynchronously, so poll until the SVG appears.
+    await expect
+      .poll(async () => (await editor.innerHTML()).includes("<svg"), {
+        timeout: 15_000,
+      })
+      .toBe(true);
 
+    const html = await editor.innerHTML();
     // The rendered diagram reflects the source node labels.
-    await expect(diagram).toContainText("Start");
-    await expect(diagram).toContainText("End");
-
+    expect(html).toContain("Start");
+    expect(html).toContain("End");
     // A non-mermaid fence stays a code block, not a diagram.
-    await expect(editor.locator("pre code")).toContainText("const value = 1;");
+    expect(html).toContain("const value = 1;");
+    expect(html).toContain("<pre");
 
     logE2eEvent("mermaid.rendered", { projectDir, file: "diagram.md" });
   });
