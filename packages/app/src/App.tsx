@@ -1152,7 +1152,7 @@ function RoughdraftPopupMock({ workflowStage }: { workflowStage: number }) {
 
 export function RoughdraftFlavoredMarkdownPage() {
   return (
-    <main className="min-h-screen bg-[#FCFCFC] dark:bg-background px-6 py-8 text-slate-950 dark:text-slate-50">
+    <main className="min-h-screen bg-background text-foreground px-6 py-8">
       <div className="mx-auto max-w-5xl">
         <Button
           className="h-9 gap-2 px-3 text-sm"
@@ -1450,7 +1450,7 @@ export function PreviewPage() {
   );
 
   return (
-    <main className="relative flex h-screen min-w-0 flex-col overflow-hidden bg-[#FCFCFC] dark:bg-background text-slate-950 dark:text-slate-50">
+    <main className="relative flex h-screen min-w-0 flex-col overflow-hidden bg-background text-foreground">
       <DocumentWorkspace
         documentPage={previewPage}
         activeDocumentPath={PREVIEW_DOCUMENT_PATH}
@@ -1932,7 +1932,7 @@ export function App() {
     getPathLeaf(documentAbsolutePath ?? activeDocumentPath) ?? "Untitled.md";
 
   return (
-    <main className="relative flex h-screen min-w-0 flex-col overflow-hidden bg-[#FCFCFC] dark:bg-background text-slate-950 dark:text-slate-50">
+    <main className="relative flex h-screen min-w-0 flex-col overflow-hidden bg-background text-foreground">
       {updateStatus ? (
         <div className="pointer-events-none absolute top-4 right-4 z-40 max-w-sm">
           <div className="pointer-events-auto">

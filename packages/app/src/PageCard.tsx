@@ -4,7 +4,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
 import { CommentEditorList } from "./CommentEditorList";
 import {
   type CriticChangeAttrs,
@@ -31,7 +31,6 @@ import {
 } from "./editor-extensions";
 import { cn } from "./lib/utils";
 import { MarkdownCodeEditor } from "./MarkdownCodeEditor";
-import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
 import { toHtml } from "./markdown";
 import type { Page, StorageBackend } from "./storage";
 import { useCommentAnchorLayout } from "./useCommentAnchorLayout";
@@ -1885,7 +1884,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     .map((commentId) => comments.get(commentId))
     .filter((comment): comment is CriticComment => Boolean(comment));
   const contentCardClass =
-    "rounded-[0.75rem] border border-[#E9E9E8] dark:border-slate-800 bg-white dark:bg-card shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]";
+    "rounded-[0.75rem] border border-border bg-card shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]";
   const documentShellClass = cn(
     "document-page-shell",
     layout === "embedded-demo"
@@ -1900,7 +1899,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     "document-page-main w-full min-w-0",
     layout === "embedded-demo"
       ? "max-w-none"
-      : "review-layout-main max-w-[46.5rem]",
+      : "review-layout-main max-w-[var(--reading-width,46.5rem)]",
   );
   const contentInsetClass = layout === "embedded-demo" ? "pb-0" : "pb-24";
   const fallbackClass = cn(
@@ -2060,7 +2059,7 @@ const CodeEditorSurface = memo(function CodeEditorSurface({
     "document-page-main w-full min-w-0",
     layout === "embedded-demo"
       ? "max-w-none"
-      : "review-layout-main max-w-[46.5rem]",
+      : "review-layout-main max-w-[var(--reading-width,46.5rem)]",
   );
   const contentInsetClass = layout === "embedded-demo" ? "pb-0" : "pb-24";
   const reviewRailClass = cn(

@@ -11,9 +11,24 @@ Patches are merged into `main`, so this fork's `main` is the patched line, not
 a mirror of upstream. Each upstream PR is also kept on its own `pr-*` branch so
 individual patches are easy to inspect or drop once they land upstream.
 
-| Upstream PR | Fixes | Branch |
+| Upstream PR | What it does | Branch |
 | --- | --- | --- |
-| [Lex-Inc/roughdraft#126](https://github.com/Lex-Inc/roughdraft/pull/126) | [#127](https://github.com/Lex-Inc/roughdraft/issues/127) — `roughdraft open`/`watch` crashes with `UND_ERR_HEADERS_TIMEOUT` when a review sits open longer than ~5 minutes | `pr-126-watch-idle-timeout` |
+| [Lex-Inc/roughdraft#126](https://github.com/Lex-Inc/roughdraft/pull/126) | Fixes [#127](https://github.com/Lex-Inc/roughdraft/issues/127) — `roughdraft open`/`watch` crashes with `UND_ERR_HEADERS_TIMEOUT` when a review sits open longer than ~5 minutes | `pr-126-watch-idle-timeout` |
+| [Lex-Inc/roughdraft#110](https://github.com/Lex-Inc/roughdraft/pull/110) | Fixes [#109](https://github.com/Lex-Inc/roughdraft/issues/109) — declares `yaml` as a root dependency so fresh global installs don't crash with `ERR_MODULE_NOT_FOUND`; adds a packaging guard test | `pr-110-yaml-root-dep` |
+| [Lex-Inc/roughdraft#135](https://github.com/Lex-Inc/roughdraft/pull/135) | Fixes single-tilde text (`~57%`, `~100h`) being misparsed as strikethrough | `pr-135-single-tilde` |
+| [Lex-Inc/roughdraft#112](https://github.com/Lex-Inc/roughdraft/pull/112) | Fixes legacy multiline inline comments leaking raw CriticMarkup into the rendered page | `pr-112-multiline-legacy-comments` |
+| [Lex-Inc/roughdraft#131](https://github.com/Lex-Inc/roughdraft/pull/131) | Feature: 👍/👎/❓ reactions on comments and replies, surfaced in the review index agents read back. **Extends the RFM spec** — docs using reactions aren't fully understood by stock Roughdraft | `pr-131-comment-reactions` |
+| [Lex-Inc/roughdraft#102](https://github.com/Lex-Inc/roughdraft/pull/102) | Feature: renders ` ```mermaid ` fences as diagrams (lossless round-trip, lazy-loaded chunk) | `pr-102-mermaid` |
+| [Lex-Inc/roughdraft#103](https://github.com/Lex-Inc/roughdraft/pull/103) | Feature: Appearance settings (Light/Warm/Dark/System theme, font, size, width) + syntax highlighting in code blocks | `pr-103-appearance` |
+
+Merge-conflict notes (relevant when dropping patches or syncing upstream):
+
+- `packages/app/src/style.css` — #102 and #103 both append rules at end-of-file;
+  resolved by keeping both blocks.
+- `packages/app/src/critic-markup/index.ts` — import list is the union of
+  #102's and the earlier patches' imports.
+- `pnpm-lock.yaml` — regenerated with `pnpm install` after the #103 merge
+  rather than hand-merged.
 
 ### What the #126 fix does
 
@@ -30,16 +45,16 @@ unchanged.
 
 ## Version scheme
 
-The published upstream version gets a `-fixNNN.X` suffix, where `NNN` is the
-upstream issue (or PR) number and `X` is a local revision counter:
+The published upstream version gets a prerelease suffix so `npm ls -g
+roughdraft` shows at a glance that the installed build is the patched fork,
+not the published package:
 
-```
-0.1.10-fix127.0
-```
+- Single patch: `-fixNNN.X` where `NNN` is the upstream issue/PR number
+  (e.g. `0.1.10-fix127.0`).
+- Multiple patches: `-patched.X` (e.g. `0.1.10-patched.0`) — the table above
+  is the authoritative list of what's included.
 
-This makes `npm ls -g roughdraft` show at a glance that the installed build is
-the patched fork, not the published package. Bump the suffix (or add another
-`fixNNN` segment) whenever the patch set changes.
+Bump `X` whenever the patch set changes on the same upstream base version.
 
 ## Applying another upstream PR
 
