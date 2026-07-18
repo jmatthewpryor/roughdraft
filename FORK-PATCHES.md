@@ -7,9 +7,13 @@ npm package.
 
 ## Currently applied patches
 
-| Upstream PR | Fixes | Branch | Merged into |
-| --- | --- | --- | --- |
-| [Lex-Inc/roughdraft#126](https://github.com/Lex-Inc/roughdraft/pull/126) | [#127](https://github.com/Lex-Inc/roughdraft/issues/127) — `roughdraft open`/`watch` crashes with `UND_ERR_HEADERS_TIMEOUT` when a review sits open longer than ~5 minutes | `pr-126-watch-idle-timeout` | `fix/watch-idle-timeout-repoll` |
+Patches are merged into `main`, so this fork's `main` is the patched line, not
+a mirror of upstream. Each upstream PR is also kept on its own `pr-*` branch so
+individual patches are easy to inspect or drop once they land upstream.
+
+| Upstream PR | Fixes | Branch |
+| --- | --- | --- |
+| [Lex-Inc/roughdraft#126](https://github.com/Lex-Inc/roughdraft/pull/126) | [#127](https://github.com/Lex-Inc/roughdraft/issues/127) — `roughdraft open`/`watch` crashes with `UND_ERR_HEADERS_TIMEOUT` when a review sits open longer than ~5 minutes | `pr-126-watch-idle-timeout` |
 
 ### What the #126 fix does
 
@@ -45,18 +49,15 @@ cd <this repo>
 # 1. Fetch the PR head from upstream into a local branch
 git fetch https://github.com/Lex-Inc/roughdraft.git pull/<PR>/head:pr-<PR>-<short-name>
 
-# 2. Merge it into the patch branch
-git checkout fix/watch-idle-timeout-repoll   # or a new combined patch branch
+# 2. Merge it into main
+git checkout main
 git merge pr-<PR>-<short-name>
 
 # 3. Bump the version suffix in package.json (see version scheme above)
 
-# 4. Rebuild, test, and reinstall (next section)
+# 4. Rebuild, test, and reinstall (next section), then push
+git push origin main pr-<PR>-<short-name>
 ```
-
-If the patch set grows beyond one fix, consider renaming/creating a combined
-branch such as `patched` that merges each `pr-*` branch, so individual patches
-stay easy to drop once they land upstream.
 
 ## Build, test, and install globally
 
@@ -89,7 +90,10 @@ npm install -g roughdraft@latest
 git remote add upstream https://github.com/Lex-Inc/roughdraft.git  # once
 git fetch upstream
 git checkout main && git merge upstream/main
-git checkout fix/watch-idle-timeout-repoll && git rebase main      # or merge
 ```
 
-Then rebuild and reinstall as above.
+Since `main` carries the patches, expect an occasional conflict when upstream
+touches the same code (that usually means the fix landed upstream — drop the
+local patch and take upstream's version). Watch for upstream version bumps in
+`package.json`: re-apply the `-fixNNN.X` suffix to the new upstream version if
+any local patches are still needed. Then rebuild and reinstall as above.
