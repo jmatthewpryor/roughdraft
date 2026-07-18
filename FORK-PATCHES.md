@@ -45,16 +45,22 @@ unchanged.
 
 ## Version scheme
 
-The published upstream version gets a prerelease suffix so `npm ls -g
-roughdraft` shows at a glance that the installed build is the patched fork,
-not the published package:
+The fork version is the **next patch version above the upstream base**, with a
+`-patched.X` prerelease suffix (e.g. upstream `0.1.10` → fork
+`0.1.11-patched.0`). Bump `X` whenever the patch set changes on the same
+upstream base. The table above is the authoritative list of what's included.
 
-- Single patch: `-fixNNN.X` where `NNN` is the upstream issue/PR number
-  (e.g. `0.1.10-fix127.0`).
-- Multiple patches: `-patched.X` (e.g. `0.1.10-patched.0`) — the table above
-  is the authoritative list of what's included.
+Two reasons for this scheme:
 
-Bump `X` whenever the patch set changes on the same upstream base version.
+1. `npm ls -g roughdraft` shows at a glance that the installed build is the
+   patched fork, not the published package.
+2. The app's update banner compares the running version against the npm
+   registry's latest release. A suffix on the *same* base version (like
+   `0.1.10-patched.0`) sorts **below** the published `0.1.10`, so the app
+   permanently nags "update available" — and following that prompt would
+   clobber the patched build. Versioning above the release silences the false
+   banner; it reappears exactly when upstream publishes something genuinely
+   newer, which is the signal to refresh the fork.
 
 ## Applying another upstream PR
 
