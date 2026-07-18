@@ -54,8 +54,9 @@ test.describe("mermaid diagram rendering", () => {
     // The rendered diagram reflects the source node labels.
     expect(html).toContain("Start");
     expect(html).toContain("End");
-    // A non-mermaid fence stays a code block, not a diagram.
-    expect(html).toContain("const value = 1;");
+    // A non-mermaid fence stays a code block, not a diagram. Assert on text
+    // content because syntax highlighting wraps tokens in spans in the HTML.
+    await expect(editor).toContainText("const value = 1;");
     expect(html).toContain("<pre");
 
     logE2eEvent("mermaid.rendered", { projectDir, file: "diagram.md" });
