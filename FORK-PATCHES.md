@@ -21,6 +21,24 @@ individual patches are easy to inspect or drop once they land upstream.
 | [Lex-Inc/roughdraft#102](https://github.com/Lex-Inc/roughdraft/pull/102) | Feature: renders ` ```mermaid ` fences as diagrams (lossless round-trip, lazy-loaded chunk) | `pr-102-mermaid` |
 | [Lex-Inc/roughdraft#103](https://github.com/Lex-Inc/roughdraft/pull/103) | Feature: Appearance settings (Light/Warm/Dark/System theme, font, size, width) + syntax highlighting in code blocks | `pr-103-appearance` |
 
+### Fork-local fixes
+
+These originate in this fork rather than upstream, so there is no upstream PR to
+watch. They are merged into `main` like the patches above.
+
+| Fix | What it does | PR |
+| --- | --- | --- |
+| Tables with inline code in more than one cell | Fixes [#1](https://github.com/jmatthewpryor/roughdraft/issues/1) — a GFM table with inline code in 2+ cells of a row rendered as **nothing** in the review surface. `codeSpanContainsPipe` paired the closing backtick of one code span with the opening backtick of the next, so `protectPipeSensitiveTables` diverted the whole table into a raw block that had no visible rendering. Also makes protected blocks render their source instead of vanishing, recognises one-dash dividers (`\|-\|-\|`), and stops rewriting tables inside fenced code samples | [#2](https://github.com/jmatthewpryor/roughdraft/pull/2) |
+
+Same bug as upstream [Lex-Inc/roughdraft#94](https://github.com/Lex-Inc/roughdraft/issues/94),
+which is still open with no fix PR. If it is fixed upstream, compare before
+dropping this patch — the upstream fix may not cover the silent-drop rendering
+behaviour, which is the part that matters most in a review surface.
+
+Follow-up: [#3](https://github.com/jmatthewpryor/roughdraft/issues/3) — the
+visible fallback is asserted at the markup level but not the layout level, so a
+CSS regression could reintroduce the silent drop without failing a test.
+
 Merge-conflict notes (relevant when dropping patches or syncing upstream):
 
 - `packages/app/src/style.css` — #102 and #103 both append rules at end-of-file;
