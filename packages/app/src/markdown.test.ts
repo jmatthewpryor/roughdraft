@@ -1,10 +1,17 @@
+import { generateHTML } from "@tiptap/core";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { criticMarkdownToEditorState } from "./critic-markup";
+import { createEditorExtensions } from "./editor-extensions";
+import {
+  criticMarkdownToEditorState,
+  criticMarkdownToRenderedHtml,
+} from "./critic-markup";
 import {
   mermaidBlockAttribute,
+  protectRichTextRoundTripMarkdown,
   rawMarkdownBlockAttribute,
+  rawMarkdownVisibleAttribute,
   splitYamlFrontmatter,
   toHtml,
   toMarkdown,
@@ -186,6 +193,97 @@ describe("toMarkdown", () => {
     expect(
       toMarkdown(`<div ${rawMarkdownBlockAttribute}="${encoded}"></div>`),
     ).toBe(protectedMarkdown);
+  });
+});
+
+describe("tables with inline code cells", () => {
+  const twoCodeCells = [
+    "### 5.1 Code — remove",
+    "| Surface | Detail |",
+    "|---|---|",
+    "| `lib/tools/handler.ts` | The handler, its `definitions.ts` registration. |",
+    "",
+  ].join("\n");
+
+  it("renders a table whose row has inline code in more than one cell", () => {
+    const { html } = criticMarkdownToRenderedHtml(twoCodeCells);
+
+    expect(html).toContain("<table>");
+    expect(html).not.toContain(rawMarkdownBlockAttribute);
+  });
+
+  it("leaves such a table unprotected so it reaches the table parser", () => {
+    expect(protectRichTextRoundTripMarkdown(twoCodeCells)).toBe(twoCodeCells);
+  });
+
+  it("still protects a table whose code span really contains a pipe", () => {
+    const pipeInCode = ["| a | b |", "|---|---|", "| `x \\| y` | z |", ""].join(
+      "\n",
+    );
+
+    expect(protectRichTextRoundTripMarkdown(pipeInCode)).toContain(
+      rawMarkdownBlockAttribute,
+    );
+  });
+
+  it("keeps a protected table readable instead of dropping it silently", () => {
+    const pipeInCode = ["| a | b |", "|---|---|", "| `x \\| y` | z |", ""].join(
+      "\n",
+    );
+    const { html } = criticMarkdownToRenderedHtml(pipeInCode);
+
+    expect(html).toContain(rawMarkdownVisibleAttribute);
+    expect(html).toContain("<pre>");
+    expect(html).toContain("`x \\| y`");
+  });
+
+  it("renders a table with a one-dash GFM divider", () => {
+    const { html } = criticMarkdownToRenderedHtml(
+      ["| a | b |", "|-|-|", "| one | two |", ""].join("\n"),
+    );
+
+    expect(html).toContain("<table>");
+    expect(html).toContain("<td>one</td>");
+  });
+
+  it("protects a one-dash table whose code span contains a pipe", () => {
+    const oneDash = ["| a | b |", "|-|-|", "| `x \\| y` | z |", ""].join("\n");
+
+    expect(protectRichTextRoundTripMarkdown(oneDash)).toContain(
+      rawMarkdownBlockAttribute,
+    );
+  });
+
+  it("keeps the protected source visible in the editor, not just the preview", () => {
+    const pipeInCode = ["| a | b |", "|---|---|", "| `x \\| y` | z |", ""].join(
+      "\n",
+    );
+    const { doc } = criticMarkdownToEditorState(pipeInCode);
+    const html = generateHTML(doc, createEditorExtensions(""));
+
+    expect(html).toContain("<pre>");
+    expect(html).toContain("`x \\| y`");
+  });
+
+  it("leaves a table inside a fenced code block as authored", () => {
+    const fenced = [
+      "```markdown",
+      "| a | b |",
+      "|-|-|",
+      "| `x \\| y` | z |",
+      "```",
+      "",
+    ].join("\n");
+
+    expect(protectRichTextRoundTripMarkdown(fenced)).toBe(fenced);
+  });
+
+  it("round-trips a table with inline code cells without losing content", () => {
+    const roundTripped = toMarkdown(toHtml(twoCodeCells));
+
+    expect(roundTripped).toContain("`lib/tools/handler.ts`");
+    expect(roundTripped).toContain("`definitions.ts`");
+    expect(roundTripped).toContain("| Surface | Detail |");
   });
 });
 

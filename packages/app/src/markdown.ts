@@ -4,6 +4,7 @@ import TurndownService from "turndown";
 import { parse as parseYaml } from "yaml";
 
 export const rawMarkdownBlockAttribute = "data-markdown-raw-block";
+export const rawMarkdownVisibleAttribute = "data-markdown-raw-visible";
 export const mermaidBlockAttribute = "data-mermaid-source";
 
 export interface MarkdownOptions {
@@ -50,10 +51,38 @@ export function decodeRawMarkdownBlock(encoded: string): string {
   }
 }
 
-function createRawMarkdownBlock(markdown: string): string {
+/**
+ * Escape markdown for display inside a single-line HTML block. `marked` ends an
+ * HTML block at the first blank line, so newlines have to survive as entities
+ * rather than as real line breaks.
+ */
+function escapeRawMarkdownPreview(markdown: string): string {
+  return escapeHtml(markdown.trimEnd()).replaceAll("\n", "&#10;");
+}
+
+/**
+ * Wrap markdown the rich-text round trip cannot represent losslessly.
+ *
+ * `visible` decides whether the reviewer can still read the content. Anything
+ * that is content in every other renderer — tables, `<details>`, indented code
+ * — must stay visible even if it looks raw. A reviewer who cannot tell that a
+ * section exists is a far worse outcome than an ugly one. Only source that is
+ * invisible everywhere (HTML comments) may render as nothing.
+ */
+function createRawMarkdownBlock(
+  markdown: string,
+  { visible = false }: { visible?: boolean } = {},
+): string {
+  const visibleAttribute = visible
+    ? ` ${rawMarkdownVisibleAttribute}="true"`
+    : "";
+  const body = visible
+    ? `<pre>${escapeRawMarkdownPreview(markdown)}</pre>`
+    : "";
+
   return `<div ${rawMarkdownBlockAttribute}="${escapeHtml(
     encodeRawMarkdownBlock(markdown),
-  )}"></div>\n`;
+  )}"${visibleAttribute}>${body}</div>\n`;
 }
 
 function encodeMermaidSource(source: string): string {
@@ -82,9 +111,10 @@ function protectRawHtmlBlocks(markdown: string): string {
   return markdown
     .replace(
       /^[ \t]*<details\b[\s\S]*?<\/details>[ \t]*(?:\r?\n|$)/gim,
-      (raw) => createRawMarkdownBlock(raw),
+      (raw) => createRawMarkdownBlock(raw, { visible: true }),
     )
     .replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*(?:\r?\n|$)/gm, (raw) =>
+      // Comments are invisible in every renderer, so hiding them drops nothing.
       createRawMarkdownBlock(raw),
     );
 }
@@ -92,25 +122,113 @@ function protectRawHtmlBlocks(markdown: string): string {
 function protectIndentedCodeAfterLists(markdown: string): string {
   return markdown.replace(
     /^(?:[-*+]|\d+[.)]) [^\r\n]*(?:\r?\n)[ \t]*(?:\r?\n)(?:(?: {4}|\t)[^\r\n]*(?:\r?\n|$))+/gm,
-    (raw) => createRawMarkdownBlock(raw),
+    (raw) => createRawMarkdownBlock(raw, { visible: true }),
   );
 }
 
+function readBacktickRun(line: string, start: number): number {
+  let end = start;
+  while (end < line.length && line[end] === "`") end += 1;
+  return end;
+}
+
+function findClosingBacktickRun(
+  line: string,
+  from: number,
+  length: number,
+): number {
+  let cursor = from;
+
+  while (cursor < line.length) {
+    if (line[cursor] !== "`") {
+      cursor += 1;
+      continue;
+    }
+
+    const end = readBacktickRun(line, cursor);
+    if (end - cursor === length) return cursor;
+    cursor = end;
+  }
+
+  return -1;
+}
+
+/**
+ * True when a literal `|` sits inside a code span, where it is cell content
+ * rather than a delimiter.
+ *
+ * Backtick runs have to be paired properly. A naive regex pairs the *closing*
+ * backtick of one span with the *opening* backtick of the next, so a row like
+ * `| `a` | `b` |` reads as a code span holding a pipe and the whole table gets
+ * protected out of the rendered document.
+ */
 function codeSpanContainsPipe(value: string): boolean {
-  return /`[^`\n]*\|[^`\n]*`/.test(value);
+  return value.split("\n").some(lineCodeSpanContainsPipe);
+}
+
+function lineCodeSpanContainsPipe(line: string): boolean {
+  let index = 0;
+
+  while (index < line.length) {
+    if (line[index] !== "`") {
+      index += 1;
+      continue;
+    }
+
+    const openEnd = readBacktickRun(line, index);
+    const runLength = openEnd - index;
+    const closeStart = findClosingBacktickRun(line, openEnd, runLength);
+
+    if (closeStart === -1) {
+      // No run of matching length follows, so these backticks are literal text.
+      index = openEnd;
+      continue;
+    }
+
+    if (line.slice(openEnd, closeStart).includes("|")) return true;
+    index = closeStart + runLength;
+  }
+
+  return false;
+}
+
+function readFenceMarker(line: string): string | null {
+  return /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1] ?? null;
 }
 
 function protectPipeSensitiveTables(markdown: string): string {
   const lines = markdown.match(/[^\r\n]*(?:\r?\n|$)/g) ?? [];
   const output: string[] = [];
+  let openFence: string | null = null;
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     const nextLine = lines[index + 1] ?? "";
+    const fenceMarker = readFenceMarker(line);
 
+    // Table syntax inside a fence is a code sample, not a table. Rewriting it
+    // would replace the author's sample with an encoded div on the next save.
+    if (openFence) {
+      if (
+        fenceMarker?.[0] === openFence[0] &&
+        fenceMarker.length >= openFence.length
+      ) {
+        openFence = null;
+      }
+      output.push(line);
+      continue;
+    }
+
+    if (fenceMarker) {
+      openFence = fenceMarker;
+      output.push(line);
+      continue;
+    }
+
+    // GFM allows a one-dash divider (`|-|-|`), so this must not require three.
     if (
       !line.includes("|") ||
-      !/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(nextLine)
+      !/^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$/.test(nextLine)
     ) {
       output.push(line);
       continue;
@@ -128,7 +246,9 @@ function protectPipeSensitiveTables(markdown: string): string {
 
     const raw = tableLines.join("");
     const needsProtection = raw.includes("\\|") || codeSpanContainsPipe(raw);
-    output.push(needsProtection ? createRawMarkdownBlock(raw) : raw);
+    output.push(
+      needsProtection ? createRawMarkdownBlock(raw, { visible: true }) : raw,
+    );
     index -= 1;
   }
 

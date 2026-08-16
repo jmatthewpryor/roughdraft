@@ -18,7 +18,12 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
-import { mermaidBlockAttribute, rawMarkdownBlockAttribute } from "./markdown";
+import {
+  decodeRawMarkdownBlock,
+  mermaidBlockAttribute,
+  rawMarkdownBlockAttribute,
+  rawMarkdownVisibleAttribute,
+} from "./markdown";
 import { renderMermaidInto } from "./render-mermaid";
 
 declare module "@tiptap/core" {
@@ -761,6 +766,13 @@ const RawMarkdownBlock = Node.create({
           [rawMarkdownBlockAttribute]: attributes.rawMarkdown ?? "",
         }),
       },
+      visible: {
+        default: false,
+        parseHTML: (element) =>
+          element.hasAttribute(rawMarkdownVisibleAttribute),
+        renderHTML: (attributes) =>
+          attributes.visible ? { [rawMarkdownVisibleAttribute]: "true" } : {},
+      },
     };
   },
 
@@ -768,8 +780,22 @@ const RawMarkdownBlock = Node.create({
     return [{ tag: `div[${rawMarkdownBlockAttribute}]`, priority: 1000 }];
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ["div", mergeAttributes(HTMLAttributes)];
+  // The node is an atom, so its source lives in an attribute. Content that a
+  // reader would otherwise expect to see has to be painted back out here, or
+  // the block renders as an empty div and the reviewer never learns it exists.
+  renderHTML({ HTMLAttributes, node }) {
+    const element = ["div", mergeAttributes(HTMLAttributes)] as const;
+    if (!node.attrs.visible) return [...element];
+
+    return [
+      ...element,
+      // trimEnd matches escapeRawMarkdownPreview, so the editor and the
+      // rendered-HTML view show the protected source identically.
+      [
+        "pre",
+        decodeRawMarkdownBlock(String(node.attrs.rawMarkdown ?? "")).trimEnd(),
+      ],
+    ];
   },
 });
 
