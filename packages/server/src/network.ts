@@ -12,11 +12,19 @@ const LOOPBACK_HOST_NAMES = new Set<string>([
   "localhost",
 ]);
 
-let watchDispatcher: Agent | undefined;
-
-export function getReviewWatchDispatcher(): Agent {
-  watchDispatcher ??= new Agent({ headersTimeout: 0, bodyTimeout: 0 });
-  return watchDispatcher;
+/**
+ * Dispatcher for the review-events long-poll. undici's defaults abort a
+ * request whose response headers take longer than ~5 minutes, which is exactly
+ * what a long review does, so both idle timeouts are disabled here.
+ *
+ * Callers own the returned Agent and must `close()` it once the watch ends.
+ * A process-wide singleton would keep a pooled keep-alive socket to whichever
+ * server answered the previous watch; if that server has since restarted
+ * (common for the long-lived MCP process, and for every test), the next watch
+ * fails with `UND_ERR_SOCKET: other side closed` on the stale socket.
+ */
+export function createReviewWatchDispatcher(): Agent {
+  return new Agent({ headersTimeout: 0, bodyTimeout: 0 });
 }
 
 export function resolveBindHosts(

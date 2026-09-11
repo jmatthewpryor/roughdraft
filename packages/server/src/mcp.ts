@@ -6,7 +6,7 @@ import {
   extractRoughdraftReviewIndex,
   markRoughdraftResolved,
 } from "@roughdraft/rfm";
-import { getReviewWatchDispatcher } from "./network.js";
+import { createReviewWatchDispatcher } from "./network.js";
 
 interface JsonRpcRequest {
   jsonrpc?: "2.0";
@@ -291,19 +291,24 @@ export async function callTool(
       body.timeoutSeconds = args.timeoutSeconds;
     }
 
-    const response = await fetchImpl(
-      new URL("/api/review-events/watch", server.url),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        dispatcher: getReviewWatchDispatcher(),
-      } as Parameters<typeof fetch>[1],
-    );
-    if (!response.ok) {
-      throw new Error(`Review watch failed: ${response.status}`);
+    const dispatcher = createReviewWatchDispatcher();
+    try {
+      const response = await fetchImpl(
+        new URL("/api/review-events/watch", server.url),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          dispatcher,
+        } as Parameters<typeof fetch>[1],
+      );
+      if (!response.ok) {
+        throw new Error(`Review watch failed: ${response.status}`);
+      }
+      return await response.json();
+    } finally {
+      await dispatcher.close();
     }
-    return response.json();
   }
 
   if (name === "roughdraft_reply_to_comment") {

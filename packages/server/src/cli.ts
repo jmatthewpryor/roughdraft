@@ -10,7 +10,7 @@ import {
   validateRoughdraftMarkdown,
 } from "@roughdraft/rfm";
 import {
-  getReviewWatchDispatcher,
+  createReviewWatchDispatcher,
   ROUGHDRAFT_BIND_HOST,
   ROUGHDRAFT_DEFAULT_PORT,
   ROUGHDRAFT_LOOPBACK_HOSTS,
@@ -2147,6 +2147,7 @@ async function runWatch(
     "UND_ERR_CONNECT_TIMEOUT",
   ]);
 
+  const dispatcher = createReviewWatchDispatcher();
   const doWatch = async () => {
     const response = await deps.fetchImpl(
       new URL("/api/review-events/watch", serverUrl),
@@ -2157,7 +2158,7 @@ async function runWatch(
         // Disable undici's default ~5 min headersTimeout/bodyTimeout on this
         // long-poll (upstream #149). The retry loop below remains as a
         // fallback for other transient socket errors.
-        dispatcher: getReviewWatchDispatcher(),
+        dispatcher,
         ...(options.timeoutSeconds !== undefined
           ? {
               signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000),
@@ -2181,32 +2182,37 @@ async function runWatch(
     nextSequence?: number;
   };
 
-  if (options.timeoutSeconds !== undefined) {
-    // Explicit timeout: a single attempt is correct; AbortSignal.timeout
-    // already guards the wall-clock budget.
-    payload = await doWatch();
-  } else {
-    // No explicit timeout (the normal `roughdraft open` flow): retry on idle
-    // timeout errors so that reviewers who leave the document open longer
-    // than undici's default idle timeout don't crash the CLI before they
-    // click "Done Reviewing".
-    for (;;) {
-      try {
-        payload = await doWatch();
-        break;
-      } catch (err) {
-        const code =
-          (err as { cause?: { code?: string }; code?: string })?.cause?.code ??
-          (err as { code?: string })?.code;
-        if (typeof code === "string" && IDLE_TIMEOUT_CODES.has(code)) {
-          // Replay from session start so a Done event fired during the
-          // reconnect window is not missed.
-          body.fromNow = false;
-          continue;
+  try {
+    if (options.timeoutSeconds !== undefined) {
+      // Explicit timeout: a single attempt is correct; AbortSignal.timeout
+      // already guards the wall-clock budget.
+      payload = await doWatch();
+    } else {
+      // No explicit timeout (the normal `roughdraft open` flow): retry on
+      // transient socket errors so that a reviewer is not stranded by a
+      // connection blip before they click "Done Reviewing". The dispatcher
+      // above already disables undici's idle timeouts, so this loop is a
+      // fallback rather than the primary defence.
+      for (;;) {
+        try {
+          payload = await doWatch();
+          break;
+        } catch (err) {
+          const code =
+            (err as { cause?: { code?: string }; code?: string })?.cause
+              ?.code ?? (err as { code?: string })?.code;
+          if (typeof code === "string" && IDLE_TIMEOUT_CODES.has(code)) {
+            // Replay from session start so a Done event fired during the
+            // reconnect window is not missed.
+            body.fromNow = false;
+            continue;
+          }
+          throw err;
         }
-        throw err;
       }
     }
+  } finally {
+    await dispatcher.close();
   }
 
   if (json) {

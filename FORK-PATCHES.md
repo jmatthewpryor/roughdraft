@@ -20,6 +20,10 @@ individual patches are easy to inspect or drop once they land upstream.
 | [Lex-Inc/roughdraft#131](https://github.com/Lex-Inc/roughdraft/pull/131) | Feature: 👍/👎/❓ reactions on comments and replies, surfaced in the review index agents read back. **Extends the RFM spec** — docs using reactions aren't fully understood by stock Roughdraft | `pr-131-comment-reactions` |
 | [Lex-Inc/roughdraft#102](https://github.com/Lex-Inc/roughdraft/pull/102) | Feature: renders ` ```mermaid ` fences as diagrams (lossless round-trip, lazy-loaded chunk) | `pr-102-mermaid` |
 | [Lex-Inc/roughdraft#103](https://github.com/Lex-Inc/roughdraft/pull/103) | Feature: Appearance settings (Light/Warm/Dark/System theme, font, size, width) + syntax highlighting in code blocks | `pr-103-appearance` |
+| [Lex-Inc/roughdraft#142](https://github.com/Lex-Inc/roughdraft/pull/142) | Fixes popover arrow artifacts in the document file menu (arrow painted over the first highlighted row and clipped into the rounded corner) | `pr-142-popover-arrow` |
+| [Lex-Inc/roughdraft#148](https://github.com/Lex-Inc/roughdraft/pull/148) | Keeps the Approve / Done Reviewing button visible once a watcher has been seen, so a crashed or restarted agent process no longer makes the button silently vanish mid-review. Clicking with no watcher falls through to the existing `No agent is watching now` state | `pr-148-sticky-approve` |
+| [Lex-Inc/roughdraft#145](https://github.com/Lex-Inc/roughdraft/pull/145) | Fixes replies that live only in YAML endmatter (the shape Roughdraft itself writes for replies) vanishing from the review rail on reload. Likely the same root cause as upstream [#87](https://github.com/Lex-Inc/roughdraft/issues/87) | `pr-145-endmatter-replies` |
+| [Lex-Inc/roughdraft#149](https://github.com/Lex-Inc/roughdraft/pull/149) | Disables undici's `headersTimeout` / `bodyTimeout` on the review watch long-poll via an explicit dispatcher, in both the CLI (`runWatch`) and the MCP server's watch tool. **Applied with a fork-local modification — see below** | `pr-149-watch-dispatcher` |
 
 ### Fork-local fixes
 
@@ -46,7 +50,41 @@ Merge-conflict notes (relevant when dropping patches or syncing upstream):
 - `packages/app/src/critic-markup/index.ts` — import list is the union of
   #102's and the earlier patches' imports.
 - `pnpm-lock.yaml` — regenerated with `pnpm install` after the #103 merge
-  rather than hand-merged.
+  rather than hand-merged. Same again after #149 (adds `undici`).
+- `package.json` (root) — #110 adds `yaml` and #149 adds `undici` to the same
+  `dependencies` block; keep both.
+- `packages/server/src/cli.ts` — #126 and #149 both edit the watch fetch in
+  `runWatch`. Resolution: keep #126's `doWatch` retry loop and pass the #149
+  dispatcher into that fetch (see "How #149 was adapted").
+
+### How #149 was adapted (and why it differs from upstream)
+
+Upstream #149 creates the no-timeout `undici.Agent` as a **process-wide
+singleton** (`getReviewWatchDispatcher()`). When merged on top of this fork it
+conflicted with #126's retry loop in `runWatch`, and once resolved the server
+test suite failed consistently: a singleton Agent keeps a pooled keep-alive
+socket to whichever server answered the previous watch, so the next watch in
+the same process fails with `UND_ERR_SOCKET: other side closed` as soon as
+that server has restarted. Every CLI test restarts the server, and the
+long-lived MCP process can hit the same thing in real use.
+
+The fork therefore ships `createReviewWatchDispatcher()` in
+`packages/server/src/network.ts` instead: each watch creates its own Agent
+and closes it in a `finally` once the watch resolves. The #126 retry loop is
+kept as a fallback for other transient socket errors (`ECONNRESET`,
+`UND_ERR_SOCKET`, …), but the dispatcher is now the primary defence against the
+5-minute crash. #149's regression test (watch survives a 500 ms injected
+headers timeout) is included unchanged.
+
+Fixing that exposed a pre-existing race in two CLI tests: they published the
+review event as soon as the CLI had *sent* the watch request, which only
+worked because the watch used to share the warm global connection pool. They
+now poll `GET /api/review-events/status` until `watcherCount > 0` before
+posting (`waitForWatcher` helper in `packages/server/src/cli.test.ts`).
+
+If upstream merges #149 as-is, expect a conflict in `network.ts`, `cli.ts`,
+and `mcp.ts`; prefer the per-watch Agent unless upstream has also addressed the
+stale pooled socket.
 
 ### What the #126 fix does
 
@@ -111,7 +149,7 @@ npm pack .                      # produces roughdraft-<version>.tgz
 npm install -g ./roughdraft-<version>.tgz
 
 # Verify
-npm ls -g roughdraft            # should show the -fixNNN suffix
+npm ls -g roughdraft            # should show the -patched.X suffix
 roughdraft --version
 ```
 
@@ -134,5 +172,5 @@ git checkout main && git merge upstream/main
 Since `main` carries the patches, expect an occasional conflict when upstream
 touches the same code (that usually means the fix landed upstream — drop the
 local patch and take upstream's version). Watch for upstream version bumps in
-`package.json`: re-apply the `-fixNNN.X` suffix to the new upstream version if
+`package.json`: re-apply the `-patched.X` suffix to the new upstream version if
 any local patches are still needed. Then rebuild and reinstall as above.

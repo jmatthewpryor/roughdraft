@@ -142,6 +142,29 @@ describe("cli", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  // The watch long-poll and the event POST travel over different connections,
+  // so "the CLI has sent the watch request" does not mean "the server has
+  // registered the waiter". Poll the status endpoint so an event is never
+  // published before anyone is listening for it.
+  async function waitForWatcher(port: number, relativePath: string) {
+    const statusUrl = new URL(
+      `http://localhost:${port}/api/review-events/status`,
+    );
+    statusUrl.searchParams.set("projectPath", projectDir);
+    statusUrl.searchParams.set("path", relativePath);
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const response = await fetch(statusUrl);
+      if (response.ok) {
+        const status = (await response.json()) as { watcherCount?: number };
+        if ((status.watcherCount ?? 0) > 0) return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error(
+      `No watcher registered for ${relativePath} on port ${port}`,
+    );
+  }
+
   function createTestDependencies() {
     const logs: string[] = [];
     const errors: string[] = [];
@@ -992,6 +1015,7 @@ describe("cli", () => {
     }
 
     expect(persisted).not.toBeNull();
+    await waitForWatcher(persisted?.port ?? 0, "draft.md");
     await fetch(`http://localhost:${persisted?.port}/api/review-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1158,6 +1182,7 @@ describe("cli", () => {
       batchWindowSeconds: 0,
     });
     expect(watchRequestBody).not.toHaveProperty("timeoutSeconds");
+    await waitForWatcher(persisted?.port ?? 0, "draft.md");
     await fetch(`http://localhost:${persisted?.port}/api/review-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
