@@ -1,15 +1,16 @@
+import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import {
   type RfmDiagnostic,
   validateRoughdraftMarkdown,
 } from "@roughdraft/rfm";
 import {
+  getReviewWatchDispatcher,
   ROUGHDRAFT_BIND_HOST,
   ROUGHDRAFT_DEFAULT_PORT,
   ROUGHDRAFT_LOOPBACK_HOSTS,
@@ -2153,12 +2154,16 @@ async function runWatch(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        // Disable undici's default ~5 min headersTimeout/bodyTimeout on this
+        // long-poll (upstream #149). The retry loop below remains as a
+        // fallback for other transient socket errors.
+        dispatcher: getReviewWatchDispatcher(),
         ...(options.timeoutSeconds !== undefined
           ? {
               signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000),
             }
           : {}),
-      },
+      } as Parameters<typeof fetch>[1],
     );
     if (!response.ok) {
       throw new Error(`Failed to watch review events: ${response.status}`);

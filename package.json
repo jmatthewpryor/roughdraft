@@ -42,6 +42,7 @@
   "dependencies": {
     "@roughdraft/rfm": "file:packages/rfm",
     "express": "^5.1.0",
+    "undici": "^7.25.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
